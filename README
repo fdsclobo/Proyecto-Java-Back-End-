@@ -118,5 +118,5 @@ Si el producto no tiene stock disponible, la API responde `400 Bad Request` con 
 
 ## Frontend
 
-El repositorio incluye un frontend simple (`index.html`) que consume la API. Con el backend corriendo, basta con abrir el archivo directamente en el navegador.
+El repositorio incluye un frontend(`index.html`) que consume la API. Con el backend corriendo
 
