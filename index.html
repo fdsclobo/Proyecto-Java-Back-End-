@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Ecommerces - Tienda de ropa</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 20px;
+    background: #f5f5f5;
+  }
+  h1 { text-align: center; }
+  nav {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+  nav button {
+    padding: 8px 16px;
+    cursor: pointer;
+  }
+  nav button.activo {
+    background: #333;
+    color: white;
+  }
+  section { display: none; }
+  section.activa { display: block; }
+
+  .producto, .categoria, .carrito-item {
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 10px;
+  }
+  .producto h3, .categoria h3 { margin: 0 0 6px; }
+  .fila-botones { margin-top: 8px; }
+  .fila-botones button { margin-right: 6px; }
+
+  form {
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+  form label { display: block; margin-top: 8px; font-size: 14px; }
+  form input, form select { width: 100%; padding: 6px; box-sizing: border-box; }
+  form button { margin-top: 12px; padding: 8px 16px; }
+
+  #mensaje {
+    text-align: center;
+    padding: 8px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+    display: none;
+  }
+  #mensaje.ok { background: #d4edda; display: block; }
+  #mensaje.error { background: #f8d7da; display: block; }
+
+  .stock-bajo { color: red; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<h1>🛍️ Ecommerces - Tienda de ropa</h1>
+
+<div id="mensaje"></div>
+
+<nav>
+  <button class="activo" onclick="mostrarSeccion('productos')">Productos</button>
+  <button onclick="mostrarSeccion('categorias')">Categorías</button>
+  <button onclick="mostrarSeccion('carrito')">Carrito (<span id="contador-carrito">0</span>)</button>
+</nav>
+
+<!-- ===== PRODUCTOS ===== -->
+<section id="seccion-productos" class="activa">
+
+  <h2>Nuevo producto</h2>
+  <form id="form-producto">
+    <input type="hidden" id="producto-id">
+
+    <label>Tipo</label>
+    <select id="producto-tipo" onchange="cambiarTipoProducto()">
+      <option value="ACCESORIO">Accesorio</option>
+      <option value="INDUMENTARIA">Indumentaria</option>
+    </select>
+
+    <label>Nombre</label>
+    <input id="producto-nombre" required>
+
+    <label>Precio</label>
+    <input id="producto-precio" type="number" step="0.01" required>
+
+    <label>Stock</label>
+    <input id="producto-stock" type="number" required>
+
+    <label>Categoría</label>
+    <select id="producto-categoria">
+      <option value="">Sin categoría</option>
+    </select>
+
+    <div id="campo-accesorio">
+      <label>Descripción</label>
+      <input id="producto-descripcion">
+    </div>
+
+    <div id="campo-indumentaria" style="display:none;">
+      <label>Depto / zona</label>
+      <input id="producto-depurb">
+      <label>Sexo</label>
+      <select id="producto-sexo">
+        <option value="Masculino">Masculino</option>
+        <option value="Femenino">Femenino</option>
+        <option value="Unisex">Unisex</option>
+      </select>
+      <label>Talle</label>
+      <input id="producto-talle">
+    </div>
+
+    <button type="submit" id="btn-producto">Crear producto</button>
+    <button type="button" onclick="cancelarEdicionProducto()" id="btn-cancelar-producto" style="display:none;">Cancelar</button>
+  </form>
+
+  <h2>Listado</h2>
+  <div id="lista-productos">Cargando...</div>
+</section>
+
+<!-- ===== CATEGORIAS ===== -->
+<section id="seccion-categorias">
+
+  <h2>Nueva categoría</h2>
+  <form id="form-categoria">
+    <input type="hidden" id="categoria-id">
+    <label>Nombre</label>
+    <input id="categoria-nombre" required>
+    <label>Descripción</label>
+    <input id="categoria-descripcion">
+    <button type="submit" id="btn-categoria">Crear categoría</button>
+    <button type="button" onclick="cancelarEdicionCategoria()" id="btn-cancelar-categoria" style="display:none;">Cancelar</button>
+  </form>
+
+  <h2>Listado</h2>
+  <div id="lista-categorias">Cargando...</div>
+</section>
+
+<!-- ===== CARRITO ===== -->
+<section id="seccion-carrito">
+  <h2>Mi carrito</h2>
+  <button onclick="crearCarritoNuevo()">Vaciar / crear carrito nuevo</button>
+  <div id="lista-carrito" style="margin-top:15px;">Cargando...</div>
+  <h3 id="total-carrito"></h3>
+</section>
+
+<script>
+const API = "http://localhost:8080";
+let categorias = [];
+let carritoId = localStorage.getItem("carritoId");
+
+/* ---------- utilidades ---------- */
+function mostrarMensaje(texto, tipo) {
+  const m = document.getElementById("mensaje");
+  m.textContent = texto;
+  m.className = tipo;
+  setTimeout(() => { m.className = ""; }, 3000);
+}
+
+async function pedir(ruta, opciones = {}) {
+  const respuesta = await fetch(API + ruta, {
+    headers: { "Content-Type": "application/json" },
+    ...opciones
+  });
+  const texto = await respuesta.text();
+  let datos;
+  try { datos = texto ? JSON.parse(texto) : null; } catch { datos = texto; }
+  if (!respuesta.ok) {
+    const error = typeof datos === "string" ? datos : Object.values(datos)[0];
+    throw new Error(error || "Error en la petición");
+  }
+  return datos;
+}
+
+function mostrarSeccion(nombre) {
+  document.querySelectorAll("section").forEach(s => s.classList.remove("activa"));
+  document.querySelectorAll("nav button").forEach(b => b.classList.remove("activo"));
+  document.getElementById("seccion-" + nombre).classList.add("activa");
+  event.target.classList.add("activo");
+  if (nombre === "carrito") cargarCarrito();
+}
+
+/* ================= PRODUCTOS ================= */
+function cambiarTipoProducto() {
+  const esIndumentaria = document.getElementById("producto-tipo").value === "INDUMENTARIA";
+  document.getElementById("campo-accesorio").style.display = esIndumentaria ? "none" : "block";
+  document.getElementById("campo-indumentaria").style.display = esIndumentaria ? "block" : "none";
+}
+
+async function cargarProductos() {
+  const contenedor = document.getElementById("lista-productos");
+  try {
+    const productos = await pedir("/productos");
+    if (productos.length === 0) {
+      contenedor.innerHTML = "<p>No hay productos todavía.</p>";
+      return;
+    }
+    contenedor.innerHTML = productos.map(p => `
+      <div class="producto">
+        <h3>${p.nombre} <small>(${p.tipo})</small></h3>
+        <p>Precio: $${p.precio} | Stock: <span class="${p.stock <= 3 ? 'stock-bajo' : ''}">${p.stock}</span></p>
+        <p>Categoría: ${p.categoria ? p.categoria.nombre : "sin categoría"}</p>
+        <p>${p.tipo === "INDUMENTARIA"
+            ? `Talle: ${p.talle || "-"} | Sexo: ${p.sexo || "-"} | Zona: ${p.depUrb || "-"}`
+            : (p.descripcion || "")}
+        </p>
+        <div class="fila-botones">
+          <button onclick="editarProducto(${p.id})">Editar</button>
+          <button onclick="eliminarProducto(${p.id})">Eliminar</button>
+          <button onclick="agregarAlCarrito(${p.id})" ${p.stock <= 0 ? "disabled" : ""}>
+            ${p.stock <= 0 ? "Sin stock" : "Agregar al carrito"}
+          </button>
+        </div>
+      </div>
+    `).join("");
+  } catch (e) {
+    contenedor.innerHTML = "<p>No se pudo conectar con la API. ¿Está corriendo el backend?</p>";
+  }
+}
+
+async function cargarCategoriasEnSelect() {
+  const select = document.getElementById("producto-categoria");
+  categorias = await pedir("/categorias");
+  select.innerHTML = '<option value="">Sin categoría</option>' +
+    categorias.map(c => `<option value="${c.id}">${c.nombre}</option>`).join("");
+}
+
+document.getElementById("form-producto").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = document.getElementById("producto-id").value;
+  const tipo = document.getElementById("producto-tipo").value;
+  const categoriaId = document.getElementById("producto-categoria").value;
+
+  const datos = {
+    tipo,
+    nombre: document.getElementById("producto-nombre").value,
+    precio: parseFloat(document.getElementById("producto-precio").value),
+    stock: parseInt(document.getElementById("producto-stock").value),
+    categoria: categoriaId ? { id: parseInt(categoriaId) } : null
+  };
+
+  if (tipo === "ACCESORIO") {
+    datos.descripcion = document.getElementById("producto-descripcion").value;
+  } else {
+    datos.depUrb = document.getElementById("producto-depurb").value;
+    datos.sexo = document.getElementById("producto-sexo").value;
+    datos.talle = document.getElementById("producto-talle").value;
+  }
+
+  try {
+    if (id) {
+      await pedir("/productos/" + id, { method: "PUT", body: JSON.stringify(datos) });
+      mostrarMensaje("Producto actualizado", "ok");
+    } else {
+      await pedir("/productos", { method: "POST", body: JSON.stringify(datos) });
+      mostrarMensaje("Producto creado", "ok");
+    }
+    cancelarEdicionProducto();
+    cargarProductos();
+  } catch (err) {
+    mostrarMensaje(err.message, "error");
+  }
+});
+
+async function editarProducto(id) {
+  const p = await pedir("/productos/" + id);
+  document.getElementById("producto-id").value = p.id;
+  document.getElementById("producto-tipo").value = p.tipo;
+  document.getElementById("producto-nombre").value = p.nombre;
+  document.getElementById("producto-precio").value = p.precio;
+  document.getElementById("producto-stock").value = p.stock;
+  document.getElementById("producto-categoria").value = p.categoria ? p.categoria.id : "";
+  document.getElementById("producto-descripcion").value = p.descripcion || "";
+  document.getElementById("producto-depurb").value = p.depUrb || "";
+  document.getElementById("producto-sexo").value = p.sexo || "Masculino";
+  document.getElementById("producto-talle").value = p.talle || "";
+  cambiarTipoProducto();
+  document.getElementById("btn-producto").textContent = "Guardar cambios";
+  document.getElementById("btn-cancelar-producto").style.display = "inline-block";
+  window.scrollTo(0, 0);
+}
+
+function cancelarEdicionProducto() {
+  document.getElementById("form-producto").reset();
+  document.getElementById("producto-id").value = "";
+  document.getElementById("btn-producto").textContent = "Crear producto";
+  document.getElementById("btn-cancelar-producto").style.display = "none";
+  cambiarTipoProducto();
+}
+
+async function eliminarProducto(id) {
+  if (!confirm("¿Eliminar este producto?")) return;
+  try {
+    await pedir("/productos/" + id, { method: "DELETE" });
+    mostrarMensaje("Producto eliminado", "ok");
+    cargarProductos();
+  } catch (err) {
+    mostrarMensaje(err.message, "error");
+  }
+}
+
+/* ================= CATEGORIAS ================= */
+async function cargarCategorias() {
+  const contenedor = document.getElementById("lista-categorias");
+  try {
+    const lista = await pedir("/categorias");
+    if (lista.length === 0) {
+      contenedor.innerHTML = "<p>No hay categorías todavía.</p>";
+      return;
+    }
+    contenedor.innerHTML = lista.map(c => `
+      <div class="categoria">
+        <h3>${c.nombre}</h3>
+        <p>${c.descripcion || "sin descripción"}</p>
+        <div class="fila-botones">
+          <button onclick="editarCategoria(${c.id})">Editar</button>
+          <button onclick="eliminarCategoria(${c.id})">Eliminar</button>
+        </div>
+      </div>
+    `).join("");
+  } catch (e) {
+    contenedor.innerHTML = "<p>No se pudo conectar con la API.</p>";
+  }
+}
+
+document.getElementById("form-categoria").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const id = document.getElementById("categoria-id").value;
+  const datos = {
+    nombre: document.getElementById("categoria-nombre").value,
+    descripcion: document.getElementById("categoria-descripcion").value
+  };
+  try {
+    if (id) {
+      await pedir("/categorias/" + id, { method: "PUT", body: JSON.stringify(datos) });
+      mostrarMensaje("Categoría actualizada", "ok");
+    } else {
+      await pedir("/categorias", { method: "POST", body: JSON.stringify(datos) });
+      mostrarMensaje("Categoría creada", "ok");
+    }
+    cancelarEdicionCategoria();
+    cargarCategorias();
+    cargarCategoriasEnSelect();
+  } catch (err) {
+    mostrarMensaje(err.message, "error");
+  }
+});
+
+async function editarCategoria(id) {
+  const c = await pedir("/categorias/" + id);
+  document.getElementById("categoria-id").value = c.id;
+  document.getElementById("categoria-nombre").value = c.nombre;
+  document.getElementById("categoria-descripcion").value = c.descripcion || "";
+  document.getElementById("btn-categoria").textContent = "Guardar cambios";
+  document.getElementById("btn-cancelar-categoria").style.display = "inline-block";
+}
+
+function cancelarEdicionCategoria() {
+  document.getElementById("form-categoria").reset();
+  document.getElementById("categoria-id").value = "";
+  document.getElementById("btn-categoria").textContent = "Crear categoría";
+  document.getElementById("btn-cancelar-categoria").style.display = "none";
+}
+
+async function eliminarCategoria(id) {
+  if (!confirm("¿Eliminar esta categoría?")) return;
+  try {
+    await pedir("/categorias/" + id, { method: "DELETE" });
+    mostrarMensaje("Categoría eliminada", "ok");
+    cargarCategorias();
+    cargarCategoriasEnSelect();
+  } catch (err) {
+    mostrarMensaje(err.message, "error");
+  }
+}
+
+/* ================= CARRITO ================= */
+async function asegurarCarrito() {
+  if (carritoId) {
+    try {
+      await pedir("/carritos/" + carritoId);
+      return carritoId;
+    } catch {
+      // el carrito guardado ya no existe, se crea uno nuevo
+    }
+  }
+  const nuevo = await pedir("/carritos", { method: "POST" });
+  carritoId = nuevo.id;
+  localStorage.setItem("carritoId", carritoId);
+  return carritoId;
+}
+
+async function actualizarContador() {
+  try {
+    const id = await asegurarCarrito();
+    const carrito = await pedir("/carritos/" + id);
+    document.getElementById("contador-carrito").textContent = carrito.productos.length;
+  } catch { /* API caída */ }
+}
+
+async function agregarAlCarrito(productoId) {
+  try {
+    const id = await asegurarCarrito();
+    await pedir(`/carritos/${id}/productos/${productoId}`, { method: "POST" });
+    mostrarMensaje("Producto agregado al carrito", "ok");
+    actualizarContador();
+    cargarProductos();
+  } catch (err) {
+    mostrarMensaje(err.message, "error");
+  }
+}
+
+async function cargarCarrito() {
+  const contenedor = document.getElementById("lista-carrito");
+  try {
+    const id = await asegurarCarrito();
+    const carrito = await pedir("/carritos/" + id);
+    if (carrito.productos.length === 0) {
+      contenedor.innerHTML = "<p>El carrito está vacío.</p>";
+      document.getElementById("total-carrito").textContent = "";
+      document.getElementById("contador-carrito").textContent = "0";
+      return;
+    }
+    contenedor.innerHTML = carrito.productos.map(p => `
+      <div class="carrito-item">
+        ${p.nombre} - $${p.precio}
+      </div>
+    `).join("");
+    const total = carrito.productos.reduce((suma, p) => suma + p.precio, 0);
+    document.getElementById("total-carrito").textContent = "Total: $" + total.toFixed(2);
+    document.getElementById("contador-carrito").textContent = carrito.productos.length;
+  } catch (e) {
+    contenedor.innerHTML = "<p>No se pudo cargar el carrito.</p>";
+  }
+}
+
+async function crearCarritoNuevo() {
+  if (carritoId) {
+    try { await pedir("/carritos/" + carritoId, { method: "DELETE" }); } catch {}
+  }
+  const nuevo = await pedir("/carritos", { method: "POST" });
+  carritoId = nuevo.id;
+  localStorage.setItem("carritoId", carritoId);
+  mostrarMensaje("Carrito reiniciado", "ok");
+  cargarCarrito();
+}
+
+/* ================= inicio ================= */
+cargarProductos();
+cargarCategorias();
+cargarCategoriasEnSelect();
+actualizarContador();
+</script>
+
+</body>
+</html>

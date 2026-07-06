@@ -1,0 +1,122 @@
+
+# Ecommerces — API REST de tienda de ropa
+
+Proyecto final del curso Back-End Java — Talento Tech Buenos Aires, Comisión 26138.
+
+API REST desarrollada con Spring Boot conectada a una base de datos MySQL, para gestionar el catálogo de una tienda de ropa (indumentaria y accesorios), categorías y carritos de compra.
+
+## Tecnologías
+
+- Java 21
+- Spring Boot 3.4.5
+- Spring Data JPA + Hibernate
+- MySQL
+- Lombok
+- Bean Validation (Hibernate Validator)
+- Maven
+
+## Estructura del proyecto
+
+com.techlab.ecommerces
+├── config          → configuración de CORS
+├── controller       → endpoints REST
+├── exception        → excepciones personalizadas + manejo centralizado
+├── model            → entidades JPA (Producto, Accesorio, Indumentaria, Categoria, Carrito)
+├── repository       → interfaces JpaRepository
+└── service          → lógica de negocio
+
+## Modelo de datos
+
+- **Producto** (clase abstracta, con herencia `SINGLE_TABLE`)
+  - **Accesorio**: producto con descripción
+  - **Indumentaria**: producto con talle, sexo y zona
+- **Categoria**: relación `@ManyToOne` con Producto
+- **Carrito**: relación `@ManyToMany` con Producto, con validación de stock al agregar un producto
+
+## Cómo ejecutar el proyecto
+
+### 1. Crear la base de datos
+
+```sql
+CREATE DATABASE ecommerces_db;
+```
+
+### 2. Configurar la conexión
+
+En `src/main/resources/application.properties`, ajustar usuario y contraseña de MySQL:
+
+```properties
+spring.datasource.url=jdbc:mysql://127.0.0.1:3306/ecommerces_db
+spring.datasource.username=root
+spring.datasource.password=TU_CONTRASEÑA
+```
+
+### 3. Levantar la aplicación
+
+Con NetBeans (o `./mvnw spring-boot:run` desde la terminal, parado en la carpeta del proyecto).
+
+Al arrancar por primera vez, un `CommandLineRunner` carga automáticamente categorías y productos de ejemplo.
+
+### 4. Probar la API
+
+La aplicación queda disponible en `http://localhost:8080`.
+
+## Endpoints principales
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| GET | `/productos` | Lista todos los productos |
+| GET | `/productos/{id}` | Obtiene un producto |
+| POST | `/productos` | Crea un producto (Accesorio o Indumentaria) |
+| PUT | `/productos/{id}` | Actualiza un producto |
+| DELETE | `/productos/{id}` | Elimina un producto |
+| GET | `/productos/categoria/{categoria}` | Busca productos por categoría |
+| GET | `/categorias` | Lista todas las categorías |
+| POST | `/categorias` | Crea una categoría |
+| PUT | `/categorias/{id}` | Actualiza una categoría |
+| DELETE | `/categorias/{id}` | Elimina una categoría |
+| POST | `/carritos` | Crea un carrito vacío |
+| POST | `/carritos/{carritoId}/productos/{productoId}` | Agrega un producto al carrito (valida stock) |
+| DELETE | `/carritos/{id}/vaciar` | Vacía el carrito |
+| DELETE | `/carritos/{id}` | Elimina el carrito |
+
+## Ejemplo de uso
+
+**Crear un producto (Accesorio):**
+
+```json
+POST /productos
+{
+  "nombre": "Zapatillas urbanas blancas",
+  "precio": 55.99,
+  "stock": 18,
+  "descripcion": "Suela de goma antideslizante",
+  "tipo": "ACCESORIO",
+  "categoria": { "id": 5 }
+}
+```
+
+**Crear un producto (Indumentaria):**
+
+```json
+POST /productos
+{
+  "nombre": "Remera básica algodón",
+  "precio": 12.99,
+  "stock": 40,
+  "depUrb": "Palermo",
+  "sexo": "Unisex",
+  "talle": "M",
+  "tipo": "INDUMENTARIA",
+  "categoria": { "id": 2 }
+}
+```
+
+**Agregar un producto al carrito:**
+
+Si el producto no tiene stock disponible, la API responde `400 Bad Request` con un mensaje descriptivo.
+
+## Frontend
+
+El repositorio incluye un frontend simple (`index.html`) que consume la API. Con el backend corriendo, basta con abrir el archivo directamente en el navegador.
+
